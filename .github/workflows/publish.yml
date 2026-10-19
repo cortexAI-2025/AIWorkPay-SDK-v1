@@ -1,0 +1,84 @@
+# Publishes the package to PyPI with Trusted Publishing: no token is stored anywhere.
+# One-time setup (see RELEASING.md): register this workflow as a trusted publisher on PyPI.
+#
+#   - Release published on GitHub  -> PyPI (the release tag must be v<version>)
+#   - Manual run, target "testpypi" -> TestPyPI (a dry run that cannot harm anything)
+#   - Manual run, target "pypi"     -> PyPI
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+
+      - name: The release tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          version="$(python -c 'exec(open("aiworkpay/_version.py").read()); print(__version__)')"
+          declared="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          test "$version" = "$declared" || { echo "::error::aiworkpay/_version.py ($version) and pyproject.toml ($declared) differ"; exit 1; }
+          test "${GITHUB_REF_NAME}" = "v${version}" || { echo "::error::tag ${GITHUB_REF_NAME} is not v${version}"; exit 1; }
+
+      - run: python -m build
+      - run: twine check --strict dist/*
+
+      - name: Install the wheel in a clean environment and import it
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          cd /tmp && /tmp/smoke/bin/python -c "import aiworkpay; print(aiworkpay.__version__)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    needs: build
+    runs-on: ubuntu-latest
+    # Add "required reviewers" to this environment to approve each release by hand
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

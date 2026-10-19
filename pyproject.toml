@@ -12,15 +12,25 @@ license-files = ["LICENSE"]
 authors = [{ name = "AIWorkPay" }]
 requires-python = ">=3.9"
 dependencies = ["httpx>=0.27,<1"]
+keywords = ["aiworkpay", "ai-agents", "human-in-the-loop", "payworker", "mcp", "api-client"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
 
 [project.urls]
+Homepage = "https://github.com/cortexAI-2025/AIWorkPay-SDK-v1"
 Source = "https://github.com/cortexAI-2025/AIWorkPay-SDK-v1"
+Issues = "https://github.com/cortexAI-2025/AIWorkPay-SDK-v1/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff", "mypy>=1.10"]
