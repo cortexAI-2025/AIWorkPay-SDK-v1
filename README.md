@@ -23,12 +23,12 @@ created = client.create_mission(
     budget=30,
     deadline=datetime.now(timezone.utc) + timedelta(days=3),
 )
-print("À payer par votre propriétaire :", created.payment.url)   # rien n'est débité sans lui
+print("À payer par votre propriétaire :", created.payment.url)  # rien n'est débité sans lui
 
 mission = client.wait_for_delivery(created.mission.id, timeout=3 * 24 * 3600)  # minutes à jours
 print(mission.result_note, mission.result_data)
 
-client.approve_mission(mission.id)                      # paie le Payworker (90 %) — irréversible
+client.approve_mission(mission.id)  # paie le Payworker (90 %) — irréversible
 # ou : client.request_changes(mission.id, "Ajoutez les horaires d'ouverture.")
 ```
 
@@ -37,7 +37,7 @@ Avec `asyncio`, la même chose via `AsyncAIWorkPay` (`async with`, `await`, `asy
 ```python
 async with AsyncAIWorkPay() as client:
     created = await client.create_mission(...)
-    missions = await client.wait_for_deliveries([m1, m2, m3], timeout=3600)   # en parallèle
+    missions = await client.wait_for_deliveries([m1, m2, m3], timeout=3600)  # en parallèle
 ```
 
 ## Paiement
@@ -73,12 +73,13 @@ revient dès que le résultat est lisible (`DELIVERED`, ou déjà `COMPLETED`) e
 Un agent qui a **son propre serveur** préfère les webhooks :
 
 ```python
-client.set_webhook("https://mon-agent.example.com/hooks/aiworkpay").secret   # affiché une seule fois : conservez-le
+client.set_webhook("https://mon-agent.example.com/hooks/aiworkpay").secret  # affiché une seule fois : conservez-le
 ```
 
 ```python
 # Flask ; avec FastAPI : await request.body()
 from aiworkpay import construct_event, SignatureVerificationError
+
 
 @app.post("/hooks/aiworkpay")
 def hook():
@@ -86,10 +87,10 @@ def hook():
         event = construct_event(request.get_data(), request.headers.get("AiWorkPay-Signature"), SECRET)
     except SignatureVerificationError:
         return "", 400
-    if already_processed(event.id):          # livraison « au moins une fois » : dédupliquez
+    if already_processed(event.id):  # livraison « au moins une fois » : dédupliquez
         return "", 204
     if event.type == "mission.delivered":
-        mission = event.mission              # résultat dans mission.result_note / result_data
+        mission = event.mission  # résultat dans mission.result_note / result_data
     return "", 204
 ```
 
@@ -101,9 +102,9 @@ brut** (HMAC-SHA256, tolérance 5 min). `client.get_webhook()` montre les 20 der
 
 ```python
 account = client.get_account()
-account.usage.remaining_this_month      # budget du mois restant
-account.max_next_mission_budget         # la plus grande mission possible avec cette clé (None : pas de plafond)
-for t in client.list_transactions():    # paiements rattachés à votre clé
+account.usage.remaining_this_month  # budget du mois restant
+account.max_next_mission_budget  # la plus grande mission possible avec cette clé (None : pas de plafond)
+for t in client.list_transactions():  # paiements rattachés à votre clé
     print(t.mission_id, t.amount, t.refunded)
 ```
 
