@@ -1,127 +1,308 @@
+"""Synchronous client."""
+
+from __future__ import annotations
+
 import time
-from typing import Any, Optional
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
+from random import random
+from types import TracebackType
+from typing import Any, Callable, Iterator, List, Optional, Type, TypeVar, Union
 
 import httpx
 
-from .errors import TaskTimeoutError
-from .types import ApproveResponse, CreateTaskInput, RejectResponse, Task
-from .utils import handle_response, with_retries
+from . import _core as core
+from .errors import (
+    AIWorkPayError,
+    APIConnectionError,
+    APITimeoutError,
+    MissionCanceledError,
+    ProofTooLargeError,
+    WaitTimeoutError,
+)
+from .models import (
+    Account,
+    Approval,
+    Cancellation,
+    ChangesRequest,
+    CreatedMission,
+    Mission,
+    MissionStatus,
+    Proof,
+    TransactionPage,
+    WebhookConfig,
+)
+
+T = TypeVar("T")
 
 
 class AIWorkPay:
-    """Synchronous client for the AIWorkPay API."""
+    """Client of the AIWorkPay agent API.
+
+    Args:
+        api_key: Your agent key (``awp_...``); defaults to ``AIWORKPAY_API_KEY``.
+        base_url: Defaults to ``AIWORKPAY_BASE_URL``, then ``https://app.aiworkpay.fr``.
+        timeout: Seconds before a request is given up.
+        max_retries: Retries of a call after a rate limit, an outage or a network error.
+            Writes are only retried when AIWorkPay deduplicates them (see ``create_mission``).
+        http_client: Your own ``httpx.Client`` (proxy, transport...). It is not closed by ``close()``.
+    """
 
     def __init__(
         self,
-        api_key: str,
-        base_url: str = "https://api.aiworkpay.com",
+        api_key: Optional[str] = None,
+        *,
+        base_url: Optional[str] = None,
         timeout: float = 30.0,
+        max_retries: int = 2,
+        http_client: Optional[httpx.Client] = None,
     ) -> None:
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self._client = httpx.Client(
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=timeout,
-        )
+        self._key, self._base = core.resolve_credentials(api_key, base_url)
+        self._retry = core.RetryPolicy(max_retries=max_retries)
+        self._owns_http = http_client is None
+        self._http = http_client or httpx.Client(timeout=timeout)
+        self._sleep: Callable[[float], None] = time.sleep
+        self._jitter: Callable[[], float] = lambda: 0.5 + random() / 2
 
-    def _url(self, path: str) -> str:
-        return f"{self.base_url}{path}"
+    def __repr__(self) -> str:
+        return f"AIWorkPay(base_url={self._base!r}, api_key='{self._key[:12]}…')"
 
-    # ------------------------------------------------------------------
-    # Task lifecycle
-    # ------------------------------------------------------------------
+    # ── Transport ────────────────────────────────────────────────────────────
 
-    def create_task(self, task: CreateTaskInput) -> Task:
-        """Submit a new human task and return its initial state."""
-        return with_retries(
-            lambda: handle_response(self._client.post(self._url("/tasks"), json=task))
-        )
+    def _send(self, op: core.Operation[Any], request_id: str) -> core.RawResponse:
+        headers = {
+            "Authorization": f"Bearer {self._key}",
+            "Accept": "application/json",
+            "User-Agent": core.USER_AGENT,
+            "X-Request-Id": request_id,
+            **(op.headers or {}),
+        }
+        url = self._base + op.path
+        try:
+            if op.max_bytes is None:
+                response = self._http.request(op.method, url, params=op.params, json=op.json, headers=headers)
+                return core.RawResponse(response.status_code, dict(response.headers), response.content)
+            with self._http.stream(op.method, url, params=op.params, headers=headers) as streamed:
+                return self._read_stream(streamed, op.max_bytes, request_id)
+        except httpx.TimeoutException as error:
+            raise APITimeoutError("AIWorkPay did not answer in time", request_id=request_id) from error
+        except httpx.TransportError as error:
+            raise APIConnectionError("AIWorkPay could not be reached", request_id=request_id) from error
 
-    def get_task(self, task_id: str) -> Task:
-        """Fetch the current state of a task by ID."""
-        return with_retries(
-            lambda: handle_response(self._client.get(self._url(f"/tasks/{task_id}")))
-        )
+    @staticmethod
+    def _read_stream(response: httpx.Response, max_bytes: int, request_id: str) -> core.RawResponse:
+        limit = max_bytes if response.is_success else core.ERROR_BODY_LIMIT
+        declared = response.headers.get("content-length")
+        if response.is_success and declared and declared.isdigit() and int(declared) > limit:
+            raise ProofTooLargeError(f"The file exceeds {max_bytes} bytes", request_id=request_id)
+        chunks: List[bytes] = []
+        size = 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > limit:
+                if response.is_success:
+                    raise ProofTooLargeError(f"The file exceeds {max_bytes} bytes", request_id=request_id)
+                break
+            chunks.append(chunk)
+        return core.RawResponse(response.status_code, dict(response.headers), b"".join(chunks))
 
-    def wait_for_result(
+    def _execute(self, op: core.Operation[T]) -> T:
+        request_id = uuid.uuid4().hex
+        attempt = 0
+        while True:
+            try:
+                response = self._send(op, request_id)
+            except APIConnectionError:
+                delay = self._retry.delay(op, attempt, self._jitter, None)
+                if delay is None:
+                    raise
+                self._sleep(delay)
+                attempt += 1
+                continue
+
+            if 200 <= response.status_code < 300:
+                try:
+                    return op.parse(response)
+                except AIWorkPayError:
+                    raise
+                except (KeyError, TypeError, ValueError, AttributeError) as error:
+                    raise AIWorkPayError(
+                        "AIWorkPay returned an unexpected response",
+                        status_code=response.status_code,
+                        code="INVALID_RESPONSE",
+                        request_id=request_id,
+                    ) from error
+
+            delay = self._retry.delay(op, attempt, self._jitter, response)
+            if delay is None:
+                raise core.read_error(response, request_id)
+            self._sleep(delay)
+            attempt += 1
+
+    # ── Missions ─────────────────────────────────────────────────────────────
+
+    def create_mission(
         self,
-        task_id: str,
-        interval: float = 2.0,
-        timeout: Optional[float] = None,
-    ) -> Task:
-        """
-        Poll until the task is completed or failed.
+        title: str,
+        description: str,
+        budget: Union[int, float, str, Decimal],
+        deadline: Union[str, date, datetime],
+        *,
+        currency: str = "EUR",
+        priority: str = "medium",
+        payment_mode: str = "checkout",
+        payment_method_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> CreatedMission:
+        """Order a mission.
 
-        Args:
-            task_id: ID of the task to poll.
-            interval: Seconds between each poll.
-            timeout: Maximum total seconds to wait. None means wait forever.
+        With the default ``payment_mode="checkout"`` nothing is charged: the mission stays
+        ``PAYMENT_PENDING`` until a human opens ``result.payment.url`` and pays, then it is published.
+        ``payment_mode="payment_intent"`` with a ``payment_method_id`` charges the card immediately.
+
+        Idempotency: the call carries an Idempotency-Key (yours, or one generated for this call) that
+        stays the same on every automatic retry, so a retry never creates a second mission. To make a
+        retry of **your own** safe too (after a crash, say), pass the same ``idempotency_key``; a
+        different request with the same key raises ``IdempotencyKeyReusedError``.
 
         Raises:
-            TaskTimeoutError: If timeout is reached before completion.
+            ValueError: an argument is invalid (nothing was sent).
+            BudgetLimitError: a cap of your key would be exceeded.
+            PaymentProviderUnavailableError: Stripe is down; nothing was created, retry with the same key.
         """
-        deadline = time.monotonic() + timeout if timeout is not None else None
+        return self._execute(
+            core.create_mission(
+                title=title,
+                description=description,
+                budget=budget,
+                deadline=deadline,
+                currency=currency,
+                priority=priority,
+                payment_mode=payment_mode,
+                payment_method_id=payment_method_id,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    def get_mission(self, mission_id: str) -> Mission:
+        """Read one of your missions (``NotFoundError`` for any other)."""
+        return self._execute(core.get_mission(mission_id))
+
+    def list_missions(
+        self, *, status: Optional[Union[str, MissionStatus]] = None, limit: int = 50, skip: int = 0
+    ) -> List[Mission]:
+        """Your missions, most recent first."""
+        return self._execute(core.list_missions(status, limit, skip))
+
+    def iter_missions(
+        self, *, status: Optional[Union[str, MissionStatus]] = None, page_size: int = 50
+    ) -> Iterator[Mission]:
+        """Every mission of your key, page after page (the API serves at most 10 000 offsets)."""
+        skip = 0
+        while skip <= 10_000:
+            page = self.list_missions(status=status, limit=page_size, skip=skip)
+            yield from page
+            if len(page) < page_size:
+                return
+            skip += page_size
+
+    def wait_for_delivery(self, mission_id: str, *, interval: float = 5.0, timeout: Optional[float] = None) -> Mission:
+        """Poll until the Payworker's result can be read, then return the mission.
+
+        The mission is only published once a human has paid ``payment.url``, then a Payworker must
+        take it: this can take minutes to days, so set a ``timeout`` and a generous ``interval``
+        (AIWorkPay limits a key to 120 requests a minute). For a server, prefer webhooks.
+
+        Returns:
+            The mission, ``DELIVERED`` (approve it or request changes) or already ``COMPLETED``.
+
+        Raises:
+            WaitTimeoutError: ``timeout`` seconds passed.
+            MissionCanceledError: the mission was canceled meanwhile.
+        """
+        if interval <= 0:
+            raise ValueError("interval must be positive")
+        deadline = None if timeout is None else time.monotonic() + timeout
         while True:
-            task = self.get_task(task_id)
-            if task["status"] in ("completed", "failed"):
-                return task
-            if deadline is not None and time.monotonic() >= deadline:
-                raise TaskTimeoutError(
-                    f"Task {task_id} did not complete within {timeout}s.",
-                    status_code=None,
-                )
-            time.sleep(interval)
+            mission = self.get_mission(mission_id)
+            if mission.status == MissionStatus.CANCELED:
+                raise MissionCanceledError(f"Mission {mission_id} was canceled")
+            if mission.result_available:
+                return mission
+            wait = interval
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise WaitTimeoutError(f"Mission {mission_id} was not delivered within {timeout}s")
+                wait = min(interval, remaining)
+            self._sleep(wait)
 
-    def approve_and_pay(self, task_id: str) -> ApproveResponse:
-        """Approve and trigger payment for a completed task."""
-        return with_retries(
-            lambda: handle_response(
-                self._client.post(self._url(f"/tasks/{task_id}/approve"))
-            )
-        )
+    def wait_for_deliveries(
+        self, mission_ids: List[str], *, interval: float = 5.0, timeout: Optional[float] = None
+    ) -> List[Mission]:
+        """``wait_for_delivery`` for each mission, one after the other (see ``AsyncAIWorkPay`` for concurrency)."""
+        return [self.wait_for_delivery(mid, interval=interval, timeout=timeout) for mid in mission_ids]
 
-    def reject_task(
-        self, task_id: str, reason: Optional[str] = None
-    ) -> RejectResponse:
-        """Reject a completed task, optionally providing a reason."""
-        return with_retries(
-            lambda: handle_response(
-                self._client.post(
-                    self._url(f"/tasks/{task_id}/reject"),
-                    json={"reason": reason},
-                )
-            )
-        )
+    def approve_mission(self, mission_id: str) -> Approval:
+        """Accept the delivered result: pays the Payworker (90 %). **Irreversible.**
 
-    # ------------------------------------------------------------------
-    # Batch helpers
-    # ------------------------------------------------------------------
+        Needs the ``missions:approve`` permission. Approving twice is harmless (``already_approved``).
+        """
+        return self._execute(core.approve_mission(mission_id))
 
-    def create_tasks(self, tasks: list[CreateTaskInput]) -> list[Task]:
-        """Submit multiple tasks and return their initial states."""
-        return [self.create_task(t) for t in tasks]
+    def request_changes(self, mission_id: str, feedback: str) -> ChangesRequest:
+        """Send a delivered result back to the same Payworker (3 times at most). No money moves."""
+        return self._execute(core.request_changes(mission_id, feedback))
 
-    def wait_for_results(
-        self,
-        task_ids: list[str],
-        interval: float = 2.0,
-        timeout: Optional[float] = None,
-    ) -> list[Task]:
-        """Poll all task IDs sequentially until all are done."""
-        return [self.wait_for_result(tid, interval=interval, timeout=timeout) for tid in task_ids]
+    def cancel_mission(self, mission_id: str) -> Cancellation:
+        """Withdraw a mission no Payworker has taken yet: the payment page is closed, or the payment refunded."""
+        return self._execute(core.cancel_mission(mission_id))
 
-    # ------------------------------------------------------------------
-    # Context manager support
-    # ------------------------------------------------------------------
+    def download_proof(self, mission_id: str, proof_id: str, *, max_bytes: int = core.MAX_PROOF_BYTES) -> Proof:
+        """Download an uploaded proof (``attachment.is_uploaded``) with your key.
+
+        The content comes from an external human and is not trusted: check it, never execute it.
+        """
+        return self._execute(core.download_proof(mission_id, proof_id, max_bytes))
+
+    # ── Account ──────────────────────────────────────────────────────────────
+
+    def get_account(self) -> Account:
+        """Your key, its limits and what it has spent."""
+        return self._execute(core.get_account())
+
+    def list_transactions(self, *, mission_id: Optional[str] = None, limit: int = 50, skip: int = 0) -> TransactionPage:
+        """The payments booked on your key, most recent first."""
+        return self._execute(core.list_transactions(mission_id, limit, skip))
+
+    # ── Webhook of your key ──────────────────────────────────────────────────
+
+    def get_webhook(self) -> WebhookConfig:
+        """Your endpoint, the event types, and the last 20 deliveries."""
+        return self._execute(core.get_webhook())
+
+    def set_webhook(self, url: str, *, rotate_secret: bool = False) -> WebhookConfig:
+        """Set your endpoint. The returned ``secret`` is shown once (first call, or ``rotate_secret=True``)."""
+        return self._execute(core.set_webhook(url, rotate_secret))
+
+    def delete_webhook(self) -> None:
+        self._execute(core.delete_webhook())
+
+    def send_webhook_test(self) -> str:
+        """Queue a ``webhook.ping`` event; returns its id. Read its outcome with ``get_webhook()``."""
+        return self._execute(core.send_webhook_test())
+
+    # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def close(self) -> None:
-        self._client.close()
+        if self._owns_http:
+            self._http.close()
 
     def __enter__(self) -> "AIWorkPay":
         return self
 
-    def __exit__(self, *_: Any) -> None:
+    def __exit__(
+        self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
+    ) -> None:
         self.close()

@@ -1,24 +1,96 @@
+"""AIWorkPay Python SDK: order missions from human Payworkers, follow them, pay for them."""
+
+from ._version import __version__
 from .async_client import AsyncAIWorkPay
 from .client import AIWorkPay
 from .errors import (
     AIWorkPayError,
+    APIConnectionError,
+    APITimeoutError,
     AuthenticationError,
+    BudgetLimitError,
+    ConflictError,
+    IdempotencyKeyReusedError,
+    InsufficientScopeError,
+    MissionCanceledError,
     NotFoundError,
+    PaymentError,
+    PaymentProviderUnavailableError,
+    ProofTooLargeError,
     RateLimitError,
-    TaskTimeoutError,
+    ServerError,
+    SignatureVerificationError,
+    ValidationError,
+    WaitTimeoutError,
 )
-from .types import CreateTaskInput, Task
+from .models import (
+    Account,
+    Approval,
+    Attachment,
+    Cancellation,
+    ChangesRequest,
+    Commission,
+    CreatedMission,
+    KeyInfo,
+    Limits,
+    Mission,
+    MissionStatus,
+    Payment,
+    Proof,
+    Transaction,
+    TransactionPage,
+    Usage,
+    WebhookConfig,
+    WebhookDelivery,
+    WebhookEvent,
+)
+from .webhooks import construct_event, sign, verify_signature
 
 __all__ = [
+    "__version__",
     "AIWorkPay",
     "AsyncAIWorkPay",
+    # errors
     "AIWorkPayError",
+    "APIConnectionError",
+    "APITimeoutError",
     "AuthenticationError",
+    "BudgetLimitError",
+    "ConflictError",
+    "IdempotencyKeyReusedError",
+    "InsufficientScopeError",
+    "MissionCanceledError",
     "NotFoundError",
+    "PaymentError",
+    "PaymentProviderUnavailableError",
+    "ProofTooLargeError",
     "RateLimitError",
-    "TaskTimeoutError",
-    "CreateTaskInput",
-    "Task",
+    "ServerError",
+    "SignatureVerificationError",
+    "ValidationError",
+    "WaitTimeoutError",
+    # results
+    "Account",
+    "Approval",
+    "Attachment",
+    "Cancellation",
+    "ChangesRequest",
+    "Commission",
+    "CreatedMission",
+    "KeyInfo",
+    "Limits",
+    "Mission",
+    "MissionStatus",
+    "Payment",
+    "Proof",
+    "Transaction",
+    "TransactionPage",
+    "Usage",
+    "WebhookConfig",
+    "WebhookDelivery",
+    "WebhookEvent",
+    # webhooks
+    "construct_event",
+    "sign",
+    "verify_signature",
 ]
-
-__version__ = "1.0.0"

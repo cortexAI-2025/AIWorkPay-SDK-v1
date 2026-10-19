@@ -1,21 +1,49 @@
-[project]
-name = "aiworkpay"
-version = "1.0.0"
-description = "AIWorkPay SDK - Human task delegation for AI agents"
-authors = [{name = "AIWorkPay"}]
-readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "httpx>=0.27.0"
-]
-
-[project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "ruff"]
-
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "aiworkpay"
+version = "2.0.0"
+description = "AIWorkPay SDK: order missions from human Payworkers for your AI agent, follow them, pay for them."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "AIWorkPay" }]
+requires-python = ">=3.9"
+dependencies = ["httpx>=0.27,<1"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Source = "https://github.com/cortexAI-2025/AIWorkPay-SDK-v1"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff", "mypy>=1.10"]
+
+[tool.setuptools]
+packages = ["aiworkpay"]
+
+[tool.setuptools.package-data]
+aiworkpay = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["integration: needs a running AIWorkPay (AIWORKPAY_TEST_BASE_URL, AIWORKPAY_TEST_API_KEY)"]
+
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+files = ["aiworkpay"]
