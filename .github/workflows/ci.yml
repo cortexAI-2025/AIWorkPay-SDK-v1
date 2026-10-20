@@ -24,3 +24,51 @@ jobs:
         if: matrix.python-version == '3.13'
         run: mypy
       - run: pytest -q
+
+  # The 12-step scenario against the real AIWorkPay server (PostgreSQL + Stripe simulator, no secret, no real payment)
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aw_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aw_e2e
+      AUTH_SECRET: ci-placeholder-secret-min-32-chars-ok
+      STRIPE_SECRET_KEY: sk_test_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_placeholder
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3300
+      E2E_CONTROL_URL: http://127.0.0.1:4100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: cortexAI-2025/Aiworkpay-v2
+          ref: claude/agent-ecosystem-v1
+          path: backend
+          token: ${{ secrets.BACKEND_READ_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Start the isolated backend
+        working-directory: backend
+        run: |
+          npm ci && npx prisma generate && npm run build
+          nohup npm run e2e:harness > ../harness.log 2>&1 &
+          for i in $(seq 1 90); do grep -q E2E_HARNESS_READY ../harness.log && break; sleep 2; done
+          grep -q E2E_HARNESS_READY ../harness.log || { cat ../harness.log; exit 1; }
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/test_e2e.py -q
