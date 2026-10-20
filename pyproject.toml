@@ -44,7 +44,7 @@ aiworkpay = ["py.typed"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["integration: needs a running AIWorkPay (AIWORKPAY_TEST_BASE_URL, AIWORKPAY_TEST_API_KEY)"]
+markers = ["integration: needs a running AIWorkPay (AIWORKPAY_TEST_BASE_URL, AIWORKPAY_TEST_API_KEY)", "e2e: needs the isolated environment of Aiworkpay-v2 (E2E_CONTROL_URL)"]
 
 [tool.ruff]
 line-length = 120
