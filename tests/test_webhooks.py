@@ -89,3 +89,12 @@ def test_ping_and_cancellation_events(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     event = construct_event(canceled, sign(SECRET, canceled, TIMESTAMP), SECRET)
     assert event.reason == "checkout_expired" and event.mission is not None and event.mission.status == "CANCELED"
+
+
+@pytest.mark.parametrize("candidate", ["é" * 64, "d4bf\u20ac" + "0" * 60, "\ud83d\ude00"])
+def test_a_non_ascii_signature_is_refused_not_raised(candidate: str) -> None:
+    # The header comes from the network: it must never turn into an exception in the caller's webhook endpoint.
+    header = "t=1792400000,v1=" + candidate
+    assert verify_signature(BODY, header, SECRET, now=NOW) is False
+    valid = header + ",v1=" + HEADER.split("v1=")[1]
+    assert verify_signature(BODY, valid, SECRET, now=NOW), "a valid second signature still wins"

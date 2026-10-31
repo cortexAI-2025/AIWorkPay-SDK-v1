@@ -66,7 +66,14 @@ def verify_signature(
     if tolerance is not None and abs((time.time() if now is None else now) - timestamp) > tolerance:
         return False
     expected = sign(secret, payload, timestamp).split("v1=", 1)[1]
-    return any(hmac.compare_digest(expected, candidate) for candidate in parts.get("v1", ()))
+    # Compare bytes: ``hmac.compare_digest`` raises TypeError on a str holding non-ASCII characters, and the header is
+    # attacker-controlled. A forged header must be refused (False), never crash the receiving endpoint.
+    expected_bytes = expected.encode("utf-8")
+    # errors="replace": a lone surrogate is not encodable, and still must simply not match.
+    return any(
+        hmac.compare_digest(expected_bytes, candidate.encode("utf-8", errors="replace"))
+        for candidate in parts.get("v1", ())
+    )
 
 
 def construct_event(

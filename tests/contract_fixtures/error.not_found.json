@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "body": {
+    "error": "Mission introuvable",
+    "code": "MISSION_NOT_FOUND"
+  }
+}

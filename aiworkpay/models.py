@@ -101,6 +101,9 @@ class Mission:
     payworker_amount: Optional[Decimal] = None
     platform_fee_amount: Optional[Decimal] = None
     attachments: Tuple[Attachment, ...] = ()
+    #: Past its deadline and still waiting for its delivery. Reported only: a mission a Payworker has taken is never
+    #: canceled for that reason, and stays readable. False when the API does not say (older servers).
+    overdue: bool = False
     raw: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @property
@@ -144,6 +147,7 @@ class Mission:
             payworker_amount=_dec(data.get("payworkerAmount")),
             platform_fee_amount=_dec(data.get("platformFeeAmount")),
             attachments=tuple(Attachment.from_api(a) for a in data.get("attachments") or ()),
+            overdue=bool(data.get("overdue")),
             raw=dict(data),
         )
 
@@ -398,6 +402,7 @@ class WebhookEvent:
 
     @property
     def reason(self) -> Optional[str]:
-        """For ``mission.canceled``: ``agent_request``, ``admin``, ``checkout_expired`` or ``payment_failed``."""
+        """For ``mission.canceled``: ``agent_request``, ``admin``, ``expired`` (nobody took it before its deadline),
+        ``checkout_expired`` or ``payment_failed``."""
         value = self.data.get("reason")
         return value if isinstance(value, str) else None

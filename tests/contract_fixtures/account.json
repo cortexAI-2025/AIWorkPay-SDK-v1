@@ -1,0 +1,37 @@
+{
+  "key": {
+    "id": "key_1",
+    "label": "Agent catalogue",
+    "prefix": "awp_abcd",
+    "scopes": [
+      "missions:read",
+      "missions:write",
+      "missions:approve"
+    ],
+    "active": true,
+    "expiresAt": null,
+    "lastUsedAt": "2026-10-02T09:00:00.000Z",
+    "createdAt": "2026-09-01T00:00:00.000Z"
+  },
+  "limits": {
+    "maxMissionBudget": 100,
+    "monthlyBudget": 500
+  },
+  "usage": {
+    "monthStart": "2026-10-01T00:00:00.000Z",
+    "committedThisMonth": 25,
+    "remainingThisMonth": 475,
+    "totalPaid": 25,
+    "totalRefunded": 0,
+    "netPaid": 25
+  },
+  "missions": {
+    "total": 1,
+    "byStatus": {
+      "IN_PROGRESS": 1
+    }
+  },
+  "webhook": {
+    "configured": true
+  }
+}
