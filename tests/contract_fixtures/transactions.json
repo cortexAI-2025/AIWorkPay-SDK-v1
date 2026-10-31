@@ -1,0 +1,16 @@
+{
+  "total": 1,
+  "transactions": [
+    {
+      "id": "txn_1",
+      "type": "AGENT_PAYMENT",
+      "status": "SUCCEEDED",
+      "amount": 25,
+      "currency": "EUR",
+      "missionId": "msn_contract_1",
+      "missionStatus": "IN_PROGRESS",
+      "refunded": false,
+      "createdAt": "2026-10-01T08:01:00.000Z"
+    }
+  ]
+}

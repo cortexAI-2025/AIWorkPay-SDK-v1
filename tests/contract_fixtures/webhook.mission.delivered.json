@@ -1,0 +1,26 @@
+{
+  "id": "evt_fixture0000000000000000000000000",
+  "type": "mission.delivered",
+  "created": 1792400000,
+  "data": {
+    "mission": {
+      "id": "msn_contract_1",
+      "title": "Vérifier 20 fiches",
+      "description": "Contrôler 20 fiches produit et corriger les prix.",
+      "status": "DELIVERED",
+      "budget": 25,
+      "currency": "EUR",
+      "priority": "MEDIUM",
+      "deadline": "2020-01-01T00:00:00.000Z",
+      "revisionCount": 0,
+      "resultNote": "Fait : 20 fiches corrigées.",
+      "resultData": {
+        "corrected": 20
+      },
+      "deliveredAt": "2026-10-02T10:00:00.000Z",
+      "createdAt": "2026-10-01T08:00:00.000Z",
+      "updatedAt": "2026-10-01T09:00:00.000Z",
+      "url": "https://app.example/api/missions/msn_contract_1"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "id": "msn_contract_1",
+  "title": "Vérifier 20 fiches",
+  "description": "Contrôler 20 fiches produit et corriger les prix.",
+  "budget": "25",
+  "currency": "EUR",
+  "priority": "MEDIUM",
+  "deadline": "2020-01-01T00:00:00.000Z",
+  "status": "IN_PROGRESS",
+  "paymentMode": "payment_intent",
+  "assignedToUserId": "usr_worker_1",
+  "revisionCount": 0,
+  "resultNote": null,
+  "resultData": null,
+  "revisionFeedback": null,
+  "deliveredAt": null,
+  "payworkerAmount": null,
+  "platformFeeAmount": null,
+  "stripePaymentIntentId": "pi_test_1",
+  "stripeCheckoutSessionId": null,
+  "checkoutUrl": null,
+  "checkoutExpiresAt": null,
+  "createdByApiKeyId": "key_1",
+  "createdByUserId": null,
+  "createdAt": "2026-10-01T08:00:00.000Z",
+  "updatedAt": "2026-10-01T09:00:00.000Z",
+  "attachments": [
+    {
+      "id": "att_1",
+      "missionId": "msn_contract_1",
+      "kind": "BRIEF",
+      "filename": "consignes.pdf",
+      "mimeType": "application/pdf",
+      "size": 1204,
+      "url": "https://app.example/api/missions/msn_contract_1/proofs/att_1",
+      "scanStatus": null,
+      "createdAt": "2026-10-01T08:05:00.000Z",
+      "source": "link"
+    }
+  ],
+  "overdue": true
+}

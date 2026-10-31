@@ -1,0 +1,10 @@
+{
+  "status": 429,
+  "body": {
+    "error": "Trop de requêtes",
+    "code": "RATE_LIMITED",
+    "details": {
+      "retryAfterSeconds": 12
+    }
+  }
+}
