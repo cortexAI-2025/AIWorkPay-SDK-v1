@@ -8,7 +8,6 @@
   "deadline": "2020-01-01T00:00:00.000Z",
   "status": "IN_PROGRESS",
   "paymentMode": "payment_intent",
-  "assignedToUserId": "usr_worker_1",
   "revisionCount": 0,
   "resultNote": null,
   "resultData": null,
@@ -21,7 +20,6 @@
   "checkoutUrl": null,
   "checkoutExpiresAt": null,
   "createdByApiKeyId": "key_1",
-  "createdByUserId": null,
   "createdAt": "2026-10-01T08:00:00.000Z",
   "updatedAt": "2026-10-01T09:00:00.000Z",
   "attachments": [
@@ -38,5 +36,6 @@
       "source": "link"
     }
   ],
+  "assigned": true,
   "overdue": true
 }

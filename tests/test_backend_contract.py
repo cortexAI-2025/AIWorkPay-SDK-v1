@@ -56,6 +56,15 @@ def test_an_older_server_without_the_overdue_flag_reads_as_not_overdue() -> None
     assert Mission.from_api(data).overdue is False
 
 
+@pytest.mark.parametrize("name", ["mission.agent.in_progress_overdue", "mission.agent.delivered"])
+def test_agent_missions_never_carry_internal_user_ids(name: str) -> None:
+    raw = json.loads((DIR / f"{name}.json").read_text())
+    assert "assignedToUserId" not in raw
+    assert "createdByUserId" not in raw
+    assert raw["assigned"] is True
+    assert "usr_worker" not in repr(Mission.from_api(raw))
+
+
 def test_the_account() -> None:
     account = Account.from_api(fixture("account"))
     assert account.usage.remaining_this_month == Decimal("475")
